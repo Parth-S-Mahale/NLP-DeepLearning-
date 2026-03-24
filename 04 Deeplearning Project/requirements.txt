@@ -1,0 +1,10 @@
+tensorflow
+keras
+streamlit
+protobuf
+panda
+numpy
+scikit-learn
+matplotlib
+tensorboard
+scikeras
