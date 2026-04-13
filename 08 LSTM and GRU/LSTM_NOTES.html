@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Understanding LSTM Networks — Study Notes</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Georgia',serif;background:#FEFEF8;color:#2C2C2A;line-height:1.75;font-size:15px}
+.page{max-width:800px;margin:0 auto;padding:48px 36px}
+
+/* HEADER */
+.header{border-bottom:3px solid #2C2C2A;padding-bottom:24px;margin-bottom:44px}
+.header h1{font-size:30px;font-weight:700;letter-spacing:-0.5px;margin-bottom:6px}
+.header .sub{font-size:13px;color:#888780;font-family:'Courier New',monospace}
+.header .sub span{margin-right:24px}
+
+/* SECTION */
+.section{margin-bottom:52px}
+.section-title{font-size:19px;font-weight:700;padding:8px 0 8px 14px;margin-bottom:18px;border-radius:0 4px 4px 0}
+.s1 .section-title{border-left:4px solid #1D9E75;color:#085041}
+.s2 .section-title{border-left:4px solid #E24B4A;color:#791F1F}
+.s3 .section-title{border-left:4px solid #534AB7;color:#26215C}
+.s4 .section-title{border-left:4px solid #0F6E56;color:#04342C}
+.s5 .section-title{border-left:4px solid #BA7517;color:#412402}
+.s6 .section-title{border-left:4px solid #3C3489;color:#26215C}
+
+.section p{margin-bottom:13px;color:#3d3d3a}
+
+/* CALLOUTS */
+.insight{background:#FFF8E8;border-left:3px solid #EF9F27;padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0;font-size:14px;color:#412402}
+.insight strong{font-weight:700;color:#633806}
+.note{background:#EEF6FF;border-left:3px solid #378ADD;padding:11px 15px;margin:14px 0;border-radius:0 8px 8px 0;font-size:14px;color:#042C53}
+.warning{background:#FEF0EF;border-left:3px solid #E24B4A;padding:11px 15px;margin:14px 0;border-radius:0 8px 8px 0;font-size:14px;color:#501313}
+.success{background:#EAF7F2;border-left:3px solid #1D9E75;padding:11px 15px;margin:14px 0;border-radius:0 8px 8px 0;font-size:14px;color:#04342C}
+
+/* FORMULA */
+.formula{background:#F4F3EE;border:0.5px solid #C8C6BB;border-radius:8px;padding:13px 18px;font-family:'Courier New',monospace;font-size:14px;margin:14px 0;color:#3d3d3a;line-height:2}
+.formula .eq{display:block;margin:2px 0}
+.formula .comment{color:#888780;font-style:italic}
+
+/* DIAGRAM */
+.diagram{margin:22px 0;background:#fff;border:0.5px solid #D3D1C7;border-radius:12px;padding:18px 14px 12px}
+.diagram-caption{text-align:center;font-size:12px;color:#888780;margin-top:10px;font-style:italic;letter-spacing:0.2px}
+
+/* STEP CARDS */
+.step-card{border:0.5px solid #D3D1C7;border-radius:10px;padding:16px 18px;margin-bottom:16px;background:#fff}
+.step-card .step-num{display:inline-block;width:26px;height:26px;border-radius:50%;font-size:13px;font-weight:700;text-align:center;line-height:26px;margin-right:10px}
+.step-card h4{display:inline;font-size:15px;font-weight:700}
+.step-card p{margin-top:8px;font-size:14px;color:#3d3d3a}
+.step1 .step-num{background:#EEEDFE;color:#3C3489}
+.step2 .step-num{background:#E1F5EE;color:#085041}
+.step3 .step-num{background:#FAEEDA;color:#633806}
+.step4 .step-num{background:#FAECE7;color:#712B13}
+
+/* TABLE */
+table.cmp{width:100%;border-collapse:collapse;font-size:14px;margin:16px 0}
+table.cmp th{background:#F4F3EE;padding:9px 13px;text-align:left;font-weight:700;border-bottom:1.5px solid #C8C6BB}
+table.cmp td{padding:9px 13px;border-bottom:0.5px solid #E4E2D8;vertical-align:top}
+table.cmp tr:last-child td{border-bottom:none}
+table.cmp .hi{color:#085041;font-weight:700}
+
+/* BADGE */
+.badge{display:inline-block;padding:1px 9px;border-radius:10px;font-size:12px;font-weight:600;margin-right:5px}
+.b-green{background:#E1F5EE;color:#085041}
+.b-purple{background:#EEEDFE;color:#3C3489}
+.b-amber{background:#FAEEDA;color:#633806}
+.b-coral{background:#FAECE7;color:#712B13}
+.b-blue{background:#E6F1FB;color:#0C447C}
+
+hr.divider{border:none;border-top:0.5px solid #D3D1C7;margin:32px 0}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ═══════════════════════════════════════ HEADER ═══ -->
+<div class="header">
+  <h1>Understanding LSTM Networks</h1>
+  <div class="sub">
+    <span>📄 Source: Olah, C. (2015) — colah.github.io</span>
+    <span>🏷️ Deep Learning · Sequence Modelling · RNNs</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════ SECTION 1 ═══ -->
+<div class="section s1">
+  <div class="section-title">§1 — Recurrent Neural Networks (RNNs)</div>
+
+  <p>Standard feedforward neural networks process each input independently, with no memory of what came before. But for sequences — sentences, time series, video frames — context from previous steps is essential. <strong>Recurrent Neural Networks (RNNs)</strong> solve this by passing a hidden state from one step to the next, giving the network a form of memory.</p>
+
+  <p>Thinking of an RNN as a looping box can seem mysterious. But "unrolling" the loop reveals it's simply the <em>same network applied repeatedly</em>, with each copy passing its output to the next. This chain structure makes RNNs the natural architecture for sequential data.</p>
+
+  <div class="diagram">
+    <svg width="100%" viewBox="0 0 680 210">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- LEFT: Loop form -->
+      <text x="75" y="30" text-anchor="middle" font-family="Georgia,serif" font-size="13" fill="#888780" font-style="italic">Looped form</text>
+      <!-- Box A -->
+      <rect x="36" y="44" width="78" height="58" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+      <text x="75" y="79" text-anchor="middle" font-family="Georgia,serif" font-size="20" font-weight="700" fill="#085041">A</text>
+      <!-- h output -->
+      <line x1="75" y1="44" x2="75" y2="18" stroke="#1D9E75" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="75" y="14" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#085041">hₜ</text>
+      <!-- x input -->
+      <line x1="75" y1="140" x2="75" y2="104" stroke="#1D9E75" stroke-width="1.5" marker-end="url(#arr)"/>
+      <text x="75" y="156" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#085041">xₜ</text>
+      <!-- Self loop arrow -->
+      <path d="M 114 63 Q 145 40 145 73 Q 145 103 114 90" fill="none" stroke="#1D9E75" stroke-width="1.5" marker-end="url(#arr)"/>
+
+      <!-- EQUALS SIGN -->
+      <text x="180" y="80" text-anchor="middle" font-family="Georgia,serif" font-size="22" fill="#888780">=</text>
+
+      <!-- RIGHT: Unrolled form -->
+      <text x="440" y="30" text-anchor="middle" font-family="Georgia,serif" font-size="13" fill="#888780" font-style="italic">Unrolled form</text>
+
+      <!-- 4 boxes -->
+      <rect x="208" y="44" width="72" height="58" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+      <text x="244" y="79" text-anchor="middle" font-family="Georgia,serif" font-size="20" font-weight="700" fill="#085041">A</text>
+
+      <rect x="328" y="44" width="72" height="58" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+      <text x="364" y="79" text-anchor="middle" font-family="Georgia,serif" font-size="20" font-weight="700" fill="#085041">A</text>
+
+      <rect x="448" y="44" width="72" height="58" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+      <text x="484" y="79" text-anchor="middle" font-family="Georgia,serif" font-size="20" font-weight="700" fill="#085041">A</text>
+
+      <rect x="568" y="44" width="72" height="58" rx="10" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+      <text x="604" y="79" text-anchor="middle" font-family="Georgia,serif" font-size="20" font-weight="700" fill="#085041">A</text>
+
+      <!-- h outputs -->
+      <line x1="244" y1="44" x2="244" y2="18" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="364" y1="44" x2="364" y2="18" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="484" y1="44" x2="484" y2="18" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="604" y1="44" x2="604" y2="18" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <text x="244" y="14" text-anchor="middle" font-family="Courier New,monospace" font-size="12" fill="#085041">h₀</text>
+      <text x="364" y="14" text-anchor="middle" font-family="Courier New,monospace" font-size="12" fill="#085041">h₁</text>
+      <text x="484" y="14" text-anchor="middle" font-family="Courier New,monospace" font-size="12" fill="#085041">h₂</text>
+      <text x="604" y="14" text-anchor="middle" font-family="Courier New,monospace" font-size="12" fill="#085041">h₃</text>
+
+      <!-- x inputs -->
+      <line x1="244" y1="140" x2="244" y2="104" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="364" y1="140" x2="364" y2="104" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="484" y1="140" x2="484" y2="104" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="604" y1="140" x2="604" y2="104" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <text x="244" y="156" text-anchor="middle" font-family="Courier New,monospace" font-size="12" fill="#085041">x₀</text>
+      <text x="364" y="156" text-anchor="middle" font-family="Courier New,monospace" font-size="12" fill="#085041">x₁</text>
+      <text x="484" y="156" text-anchor="middle" font-family="Courier New,monospace" font-size="12" fill="#085041">x₂</text>
+      <text x="604" y="156" text-anchor="middle" font-family="Courier New,monospace" font-size="12" fill="#085041">x₃</text>
+
+      <!-- Horizontal connections -->
+      <line x1="198" y1="73" x2="208" y2="73" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <text x="193" y="77" text-anchor="end" font-family="Courier New,monospace" font-size="12" fill="#888780">…</text>
+      <line x1="280" y1="73" x2="328" y2="73" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="400" y1="73" x2="448" y2="73" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <line x1="520" y1="73" x2="568" y2="73" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr)"/>
+      <text x="656" y="77" text-anchor="start" font-family="Courier New,monospace" font-size="14" fill="#888780">…</text>
+    </svg>
+    <div class="diagram-caption">An RNN with its loop "unrolled" — the same module A is applied at each timestep, passing hidden state hₜ to the next step</div>
+  </div>
+
+  <div class="insight"><strong>Key intuition:</strong> Think of the hidden state hₜ as a "working memory" note that gets updated at every step and passed forward. Each module reads both the current input xₜ <em>and</em> the previous memory hₜ₋₁.</div>
+
+  <p>RNNs have achieved impressive results in speech recognition, language modelling, machine translation, and image captioning. But vanilla RNNs suffer from a critical limitation with longer sequences.</p>
+</div>
+
+<!-- ═══════════════════════════════════════ SECTION 2 ═══ -->
+<div class="section s2">
+  <div class="section-title">§2 — The Problem of Long-Term Dependencies</div>
+
+  <p>Sometimes nearby context is enough. Predicting the last word in "the clouds are in the <em>___</em>" only needs the last few words. But consider: "I grew up in France… I speak fluent <em>___</em>." Here the relevant context (France) is many steps back.</p>
+
+  <div class="diagram">
+    <svg width="100%" viewBox="0 0 680 200">
+      <defs>
+        <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- Title labels -->
+      <text x="170" y="22" text-anchor="middle" font-family="Georgia,serif" font-size="13" fill="#085041" font-weight="700">Short-term dependency ✓</text>
+      <text x="510" y="22" text-anchor="middle" font-family="Georgia,serif" font-size="13" fill="#A32D2D" font-weight="700">Long-term dependency ✗</text>
+
+      <!-- Short: 3 boxes, nearby context -->
+      <rect x="40" y="38" width="60" height="46" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1"/>
+      <text x="70" y="66" text-anchor="middle" font-family="Georgia,serif" font-size="16" font-weight="700" fill="#085041">A</text>
+      <rect x="130" y="38" width="60" height="46" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.5"/>
+      <text x="160" y="66" text-anchor="middle" font-family="Georgia,serif" font-size="16" font-weight="700" fill="#085041">A</text>
+      <rect x="220" y="38" width="60" height="46" rx="8" fill="#C0DD97" stroke="#3B6D11" stroke-width="2"/>
+      <text x="250" y="66" text-anchor="middle" font-family="Georgia,serif" font-size="16" font-weight="700" fill="#27500A">A</text>
+
+      <line x1="100" y1="61" x2="130" y2="61" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr2)"/>
+      <line x1="190" y1="61" x2="220" y2="61" stroke="#1D9E75" stroke-width="1.5" marker-end="url(#arr2)"/>
+
+      <!-- Context arrows showing relevant info reaches target -->
+      <path d="M160 38 Q160 15 250 38" fill="none" stroke="#1D9E75" stroke-width="2" stroke-dasharray="5,3" marker-end="url(#arr2)"/>
+
+      <text x="40" y="106" font-family="Courier New,monospace" font-size="11" fill="#888780">clouds</text>
+      <text x="130" y="106" font-family="Courier New,monospace" font-size="11" fill="#888780">are in</text>
+      <text x="220" y="106" font-family="Courier New,monospace" font-size="11" fill="#27500A">sky ←</text>
+
+      <text x="170" y="130" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#3B6D11">Context nearby — gradient flows well ✓</text>
+
+      <!-- Long: 6 boxes, distant context fails -->
+      <rect x="340" y="38" width="46" height="46" rx="8" fill="#F7C1C1" stroke="#E24B4A" stroke-width="2"/>
+      <text x="363" y="66" text-anchor="middle" font-family="Georgia,serif" font-size="14" font-weight="700" fill="#A32D2D">A</text>
+      <rect x="400" y="38" width="46" height="46" rx="8" fill="#FAECE7" stroke="#E24B4A" stroke-width="1"/>
+      <text x="423" y="66" text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="#A32D2D">A</text>
+      <rect x="460" y="38" width="46" height="46" rx="8" fill="#FAECE7" stroke="#E24B4A" stroke-width="1" opacity="0.8"/>
+      <text x="483" y="66" text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="#A32D2D" opacity="0.7">A</text>
+      <rect x="520" y="38" width="46" height="46" rx="8" fill="#FAECE7" stroke="#E24B4A" stroke-width="1" opacity="0.6"/>
+      <text x="543" y="66" text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="#A32D2D" opacity="0.5">A</text>
+      <rect x="580" y="38" width="46" height="46" rx="8" fill="#FAECE7" stroke="#D3D1C7" stroke-width="1" opacity="0.4"/>
+      <text x="603" y="66" text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="#888780" opacity="0.4">A</text>
+      <rect x="630" y="38" width="46" height="46" rx="8" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1" opacity="0.3"/>
+      <text x="653" y="66" text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="#888780" opacity="0.3">A</text>
+
+      <line x1="386" y1="61" x2="400" y2="61" stroke="#E24B4A" stroke-width="1.3" marker-end="url(#arr2)"/>
+      <line x1="446" y1="61" x2="460" y2="61" stroke="#E24B4A" stroke-width="1.1" opacity="0.7" marker-end="url(#arr2)"/>
+      <line x1="506" y1="61" x2="520" y2="61" stroke="#E24B4A" stroke-width="0.9" opacity="0.5" marker-end="url(#arr2)"/>
+      <line x1="566" y1="61" x2="580" y2="61" stroke="#E24B4A" stroke-width="0.7" opacity="0.35" marker-end="url(#arr2)"/>
+      <line x1="626" y1="61" x2="630" y2="61" stroke="#E24B4A" stroke-width="0.5" opacity="0.2" marker-end="url(#arr2)"/>
+
+      <!-- Fading arrow showing context doesn't reach -->
+      <path d="M363 38 Q490 8 650 38" fill="none" stroke="#E24B4A" stroke-width="1.5" stroke-dasharray="5,4" opacity="0.3" marker-end="url(#arr2)"/>
+
+      <text x="340" y="106" font-family="Courier New,monospace" font-size="11" fill="#A32D2D">France…</text>
+      <text x="630" y="106" font-family="Courier New,monospace" font-size="11" fill="#888780">French? ✗</text>
+
+      <!-- Gradient label -->
+      <text x="120" y="160" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#888780">Gradient signal</text>
+      <rect x="300" y="148" width="380" height="14" rx="3" fill="url(#grad_fade)"/>
+      <defs>
+        <linearGradient id="grad_fade" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#E24B4A" stop-opacity="0.8"/>
+          <stop offset="100%" stop-color="#E24B4A" stop-opacity="0.03"/>
+        </linearGradient>
+      </defs>
+      <text x="490" y="180" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#A32D2D">Gradient vanishes — information from "France" lost</text>
+    </svg>
+    <div class="diagram-caption">Vanishing gradient: relevant context from far back (highlighted in red) cannot reliably reach the output in a standard RNN</div>
+  </div>
+
+  <div class="warning"><strong>The vanishing gradient problem:</strong> Backpropagation through time multiplies gradients repeatedly. If the values are slightly less than 1, repeated multiplication drives the gradient exponentially toward zero. The network simply cannot learn connections across long gaps.</div>
+
+  <p>In theory, RNNs can handle long dependencies — you can hand-pick parameters to do so. In practice, it's been shown (Hochreiter 1991, Bengio et al. 1994) that standard RNNs reliably fail to <em>learn</em> them. LSTMs were designed specifically to solve this.</p>
+</div>
+
+<!-- ═══════════════════════════════════════ SECTION 3 ═══ -->
+<div class="section s3">
+  <div class="section-title">§3 — LSTM Networks: Introduction</div>
+
+  <p><strong>Long Short-Term Memory networks (LSTMs)</strong>, introduced by Hochreiter &amp; Schmidhuber (1997), are a special kind of RNN built to avoid the vanishing gradient problem. Remembering information across long sequences is essentially their <em>default behaviour</em>.</p>
+
+  <p>Like all RNNs, LSTMs have a chain of repeating modules. But where a standard RNN module contains a single layer (typically tanh), an LSTM module contains <strong>four interacting neural network layers</strong>.</p>
+
+  <div class="diagram">
+    <svg width="100%" viewBox="0 0 680 230">
+      <defs>
+        <marker id="arr3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- LEFT: Standard RNN module -->
+      <text x="155" y="24" text-anchor="middle" font-family="Georgia,serif" font-size="13" fill="#888780" font-weight="700">Standard RNN module</text>
+      <rect x="50" y="40" width="210" height="140" rx="14" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <!-- Single tanh layer -->
+      <rect x="105" y="88" width="100" height="44" rx="8" fill="#C0DD97" stroke="#3B6D11" stroke-width="1"/>
+      <text x="155" y="115" text-anchor="middle" font-family="Courier New,monospace" font-size="14" font-weight="700" fill="#27500A">tanh</text>
+
+      <!-- h inputs/outputs -->
+      <line x1="50" y1="110" x2="105" y2="110" stroke="#888780" stroke-width="1.3" marker-end="url(#arr3)"/>
+      <line x1="205" y1="110" x2="260" y2="110" stroke="#888780" stroke-width="1.3" marker-end="url(#arr3)"/>
+      <text x="36" y="114" text-anchor="end" font-family="Courier New,monospace" font-size="12" fill="#888780">hₜ₋₁</text>
+      <text x="264" y="114" text-anchor="start" font-family="Courier New,monospace" font-size="12" fill="#888780">hₜ</text>
+      <!-- x input -->
+      <line x1="155" y1="180" x2="155" y2="132" stroke="#888780" stroke-width="1.3" marker-end="url(#arr3)"/>
+      <text x="155" y="196" text-anchor="middle" font-family="Courier New,monospace" font-size="12" fill="#888780">xₜ</text>
+
+      <text x="155" y="215" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#85B7EB">1 neural network layer</text>
+
+      <!-- RIGHT: LSTM module -->
+      <text x="520" y="24" text-anchor="middle" font-family="Georgia,serif" font-size="13" fill="#26215C" font-weight="700">LSTM module</text>
+      <rect x="350" y="40" width="300" height="140" rx="14" fill="#EAF3DE" stroke="#3B6D11" stroke-width="1"/>
+
+      <!-- Cell state line at top -->
+      <line x1="350" y1="68" x2="650" y2="68" stroke="#0F6E56" stroke-width="2.5"/>
+      <text x="346" y="72" text-anchor="end" font-family="Courier New,monospace" font-size="11" fill="#0F6E56">Cₜ₋₁</text>
+      <text x="654" y="72" text-anchor="start" font-family="Courier New,monospace" font-size="11" fill="#0F6E56">Cₜ</text>
+
+      <!-- 4 layers -->
+      <rect x="368" y="110" width="48" height="34" rx="6" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+      <text x="392" y="131" text-anchor="middle" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#3C3489">σ</text>
+
+      <rect x="432" y="110" width="48" height="34" rx="6" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+      <text x="456" y="131" text-anchor="middle" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#3C3489">σ</text>
+
+      <rect x="496" y="110" width="62" height="34" rx="6" fill="#C0DD97" stroke="#3B6D11" stroke-width="1"/>
+      <text x="527" y="131" text-anchor="middle" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#27500A">tanh</text>
+
+      <rect x="574" y="110" width="48" height="34" rx="6" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+      <text x="598" y="131" text-anchor="middle" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#3C3489">σ</text>
+
+      <!-- h inputs/outputs -->
+      <line x1="350" y1="127" x2="368" y2="127" stroke="#534AB7" stroke-width="1.2" marker-end="url(#arr3)"/>
+      <line x1="622" y1="127" x2="650" y2="127" stroke="#534AB7" stroke-width="1.2" marker-end="url(#arr3)"/>
+      <text x="346" y="131" text-anchor="end" font-family="Courier New,monospace" font-size="11" fill="#888780">hₜ₋₁</text>
+      <text x="654" y="131" text-anchor="start" font-family="Courier New,monospace" font-size="11" fill="#888780">hₜ</text>
+
+      <!-- x input -->
+      <line x1="500" y1="180" x2="500" y2="144" stroke="#534AB7" stroke-width="1.2" marker-end="url(#arr3)"/>
+      <text x="500" y="196" text-anchor="middle" font-family="Courier New,monospace" font-size="11" fill="#888780">xₜ</text>
+
+      <text x="520" y="215" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#534AB7">4 interacting layers (σ, σ, tanh, σ) + cell state</text>
+    </svg>
+    <div class="diagram-caption">Standard RNN module (left) vs. LSTM module (right). The LSTM adds a dedicated "cell state" highway at the top and replaces the single layer with four coordinated layers.</div>
+  </div>
+
+  <div class="note"><strong>Notation guide:</strong> In LSTM diagrams — yellow/green boxes are <em>learned neural network layers</em>; pink circles are <em>pointwise operations</em> (add or multiply); merging lines = <em>concatenation</em>; forking lines = <em>copy</em>.</div>
+</div>
+
+<!-- ═══════════════════════════════════════ SECTION 4 ═══ -->
+<div class="section s4">
+  <div class="section-title">§4 — Core Idea: The Cell State</div>
+
+  <p>The magic of the LSTM is its <strong>cell state</strong> (Cₜ) — the horizontal line running across the top of the module. Think of it as a conveyor belt: information flows straight along it with minimal interference, making it very easy for gradients to propagate unchanged across hundreds of timesteps.</p>
+
+  <div class="diagram">
+    <svg width="100%" viewBox="0 0 680 160">
+      <defs>
+        <marker id="arr4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- Conveyor belt representation -->
+      <!-- Belt body -->
+      <rect x="80" y="54" width="520" height="36" rx="18" fill="#E1F5EE" stroke="#1D9E75" stroke-width="1.5"/>
+
+      <!-- Rollers at ends -->
+      <circle cx="100" cy="72" r="18" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1.5"/>
+      <circle cx="580" cy="72" r="18" fill="#9FE1CB" stroke="#1D9E75" stroke-width="1.5"/>
+
+      <!-- Belt flow arrow -->
+      <line x1="145" y1="72" x2="550" y2="72" stroke="#0F6E56" stroke-width="2.5" marker-end="url(#arr4)"/>
+
+      <!-- Items on belt (small packages = information) -->
+      <rect x="200" y="60" width="26" height="24" rx="4" fill="#0F6E56" opacity="0.7"/>
+      <rect x="280" y="60" width="26" height="24" rx="4" fill="#0F6E56" opacity="0.5"/>
+      <rect x="360" y="60" width="26" height="24" rx="4" fill="#0F6E56" opacity="0.5"/>
+      <rect x="440" y="60" width="26" height="24" rx="4" fill="#0F6E56" opacity="0.7"/>
+
+      <!-- Gate interactions (small × and + along belt) -->
+      <!-- Forget gate: × removes a package -->
+      <circle cx="243" cy="72" r="13" fill="white" stroke="#E24B4A" stroke-width="1.5"/>
+      <text x="243" y="77" text-anchor="middle" font-family="Georgia,serif" font-size="15" fill="#E24B4A">×</text>
+      <text x="243" y="120" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#A32D2D">Forget gate</text>
+      <text x="243" y="134" text-anchor="middle" font-family="Georgia,serif" font-size="11" fill="#888780">(removes info)</text>
+      <line x1="243" y1="85" x2="243" y2="108" stroke="#E24B4A" stroke-width="1" stroke-dasharray="3,2"/>
+
+      <!-- Input gate: + adds a package -->
+      <circle cx="420" cy="72" r="13" fill="white" stroke="#534AB7" stroke-width="1.5"/>
+      <text x="420" y="77" text-anchor="middle" font-family="Georgia,serif" font-size="15" fill="#534AB7">+</text>
+      <text x="420" y="120" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#3C3489">Input gate</text>
+      <text x="420" y="134" text-anchor="middle" font-family="Georgia,serif" font-size="11" fill="#888780">(adds new info)</text>
+      <line x1="420" y1="85" x2="420" y2="108" stroke="#534AB7" stroke-width="1" stroke-dasharray="3,2"/>
+
+      <!-- Labels -->
+      <text x="66" y="76" text-anchor="end" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#085041">Cₜ₋₁</text>
+      <text x="614" y="76" text-anchor="start" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#085041">Cₜ</text>
+    </svg>
+    <div class="diagram-caption">The cell state as a conveyor belt — information flows unimpeded, with gates selectively removing (×) or adding (+) information</div>
+  </div>
+
+  <p>The LSTM regulates information flow on the cell state using <strong>gates</strong>. Each gate is a sigmoid layer (σ) that outputs values between 0 and 1, multiplied pointwise with the data. A value of <strong>0</strong> means "block everything"; a value of <strong>1</strong> means "pass everything through."</p>
+
+  <div class="diagram">
+    <svg width="100%" viewBox="0 0 680 130">
+      <defs>
+        <marker id="arr5" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- Gate mechanism: sigmoid → multiply -->
+      <text x="340" y="20" text-anchor="middle" font-family="Georgia,serif" font-size="13" fill="#888780" font-weight="700">Gate mechanism</text>
+
+      <!-- Input data -->
+      <text x="105" y="66" text-anchor="end" font-family="Courier New,monospace" font-size="13" fill="#2C2C2A">data in</text>
+      <line x1="110" y1="62" x2="190" y2="62" stroke="#2C2C2A" stroke-width="1.5" marker-end="url(#arr5)"/>
+
+      <!-- Multiply circle -->
+      <circle cx="216" cy="62" r="22" fill="#F4F3EE" stroke="#888780" stroke-width="1.5"/>
+      <text x="216" y="67" text-anchor="middle" font-family="Georgia,serif" font-size="20" fill="#2C2C2A">×</text>
+
+      <!-- Sigmoid box (gate) -->
+      <rect x="168" y="88" width="96" height="36" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.3"/>
+      <text x="216" y="111" text-anchor="middle" font-family="Courier New,monospace" font-size="14" font-weight="700" fill="#3C3489">σ(gate)</text>
+
+      <!-- Arrow from sigmoid to multiply -->
+      <line x1="216" y1="88" x2="216" y2="84" stroke="#534AB7" stroke-width="1.3" marker-end="url(#arr5)"/>
+
+      <!-- Arrow out -->
+      <line x1="238" y1="62" x2="340" y2="62" stroke="#2C2C2A" stroke-width="1.5" marker-end="url(#arr5)"/>
+      <text x="345" y="66" text-anchor="start" font-family="Courier New,monospace" font-size="13" fill="#2C2C2A">data out</text>
+
+      <!-- Sigmoid range indicator -->
+      <rect x="430" y="36" width="220" height="76" rx="8" fill="#FAEEDA" stroke="#EF9F27" stroke-width="0.5"/>
+      <text x="540" y="56" text-anchor="middle" font-family="Georgia,serif" font-size="13" font-weight="700" fill="#633806">Sigmoid output range</text>
+      <text x="540" y="75" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#412402">0.0 → blocks all data</text>
+      <text x="540" y="97" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#412402">1.0 → passes all data</text>
+    </svg>
+    <div class="diagram-caption">A gate is a sigmoid layer followed by pointwise multiplication — the sigmoid "decides" how much of the signal to let through</div>
+  </div>
+
+  <p>An LSTM has <strong>three gates</strong>: the <span class="badge b-coral">Forget gate</span> decides what to erase, the <span class="badge b-green">Input gate</span> decides what to write, and the <span class="badge b-purple">Output gate</span> decides what to read.</p>
+</div>
+
+<!-- ═══════════════════════════════════════ SECTION 5 ═══ -->
+<div class="section s5">
+  <div class="section-title">§5 — Step-by-Step LSTM Walkthrough</div>
+
+  <p>Let's walk through the four operations inside an LSTM cell using a language model example (predicting the next word) to build intuition for each gate's role.</p>
+
+  <!-- STEP 1: FORGET GATE -->
+  <div class="step-card step1">
+    <span class="step-num">1</span><h4>Forget Gate — What to throw away</h4>
+    <p>The first step decides what information to <em>discard</em> from the cell state. A sigmoid layer called the "forget gate" looks at the previous hidden state hₜ₋₁ and the current input xₜ, and outputs a number between 0 and 1 for every value in the cell state. <strong>1 = keep completely, 0 = forget completely.</strong></p>
+  </div>
+
+  <div class="diagram">
+    <svg width="100%" viewBox="0 0 680 220">
+      <defs>
+        <marker id="arr6" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- Cell state line (top) -->
+      <line x1="50" y1="65" x2="630" y2="65" stroke="#D3D1C7" stroke-width="2"/>
+      <text x="36" y="69" text-anchor="end" font-family="Courier New,monospace" font-size="12" fill="#888780">Cₜ₋₁</text>
+      <text x="638" y="69" text-anchor="start" font-family="Courier New,monospace" font-size="12" fill="#888780">Cₜ</text>
+
+      <!-- HIGHLIGHTED: Forget gate × on cell state -->
+      <circle cx="220" cy="65" r="18" fill="#FAECE7" stroke="#E24B4A" stroke-width="2"/>
+      <text x="220" y="70" text-anchor="middle" font-family="Georgia,serif" font-size="18" fill="#A32D2D">×</text>
+
+      <!-- Dimmed + gate -->
+      <circle cx="420" cy="65" r="16" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="420" y="70" text-anchor="middle" font-family="Georgia,serif" font-size="16" fill="#D3D1C7">+</text>
+
+      <!-- HIGHLIGHTED: Forget gate σ box -->
+      <line x1="220" y1="83" x2="220" y2="118" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arr6)"/>
+      <rect x="180" y="118" width="80" height="38" rx="8" fill="#FAECE7" stroke="#E24B4A" stroke-width="2"/>
+      <text x="220" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="15" font-weight="700" fill="#A32D2D">σ</text>
+
+      <!-- Dimmed input gate boxes -->
+      <rect x="310" y="118" width="80" height="38" rx="8" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="350" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#D3D1C7">σ</text>
+      <rect x="400" y="118" width="80" height="38" rx="8" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="440" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#D3D1C7">tanh</text>
+      <rect x="500" y="118" width="80" height="38" rx="8" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="540" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#D3D1C7">σ</text>
+
+      <!-- [ht-1, xt] input -->
+      <rect x="250" y="172" width="180" height="36" rx="8" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="340" y="195" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#888780">[hₜ₋₁, xₜ]</text>
+      <line x1="310" y1="172" x2="240" y2="156" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arr6)"/>
+
+      <!-- ft label + arrow to × -->
+      <text x="248" y="108" text-anchor="start" font-family="Courier New,monospace" font-size="12" fill="#A32D2D">fₜ</text>
+
+      <!-- Example annotation -->
+      <text x="520" y="180" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#633806" font-style="italic">e.g. forget old subject</text>
+      <text x="520" y="198" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#633806" font-style="italic">gender when new subject</text>
+      <text x="520" y="216" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#633806" font-style="italic">appears in text</text>
+    </svg>
+    <div class="diagram-caption">Step 1 — Forget gate: highlighted in red. The σ layer produces fₜ ∈ [0,1] for each cell value</div>
+  </div>
+
+  <div class="formula">
+    <span class="eq">fₜ = σ(Wf · [hₜ₋₁, xₜ] + bf)</span>
+    <span class="comment">// σ squashes to (0,1); fₜ close to 0 forgets, close to 1 keeps</span>
+  </div>
+
+  <!-- STEP 2: INPUT GATE -->
+  <div class="step-card step2">
+    <span class="step-num">2</span><h4>Input Gate — What new information to store</h4>
+    <p>This step has two parts: (a) a sigmoid layer (the "input gate") decides <em>which</em> values to update; (b) a tanh layer creates a vector of <em>candidate values</em> C̃ₜ that could be added. These are combined in the next step.</p>
+  </div>
+
+  <div class="diagram">
+    <svg width="100%" viewBox="0 0 680 220">
+      <defs>
+        <marker id="arr7" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- Cell state line -->
+      <line x1="50" y1="65" x2="630" y2="65" stroke="#D3D1C7" stroke-width="2"/>
+      <text x="36" y="69" text-anchor="end" font-family="Courier New,monospace" font-size="12" fill="#888780">Cₜ₋₁</text>
+      <text x="638" y="69" text-anchor="start" font-family="Courier New,monospace" font-size="12" fill="#888780">Cₜ</text>
+
+      <!-- Dimmed forget × -->
+      <circle cx="220" cy="65" r="16" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="220" y="70" text-anchor="middle" font-family="Georgia,serif" font-size="16" fill="#D3D1C7">×</text>
+
+      <!-- HIGHLIGHTED: Input + gate -->
+      <circle cx="420" cy="65" r="18" fill="#EAF3DE" stroke="#1D9E75" stroke-width="2"/>
+      <text x="420" y="70" text-anchor="middle" font-family="Georgia,serif" font-size="18" fill="#085041">+</text>
+
+      <!-- "it × C̃t" path leading to + -->
+      <line x1="350" y1="83" x2="390" y2="83" stroke="#1D9E75" stroke-width="1.5"/>
+      <circle cx="350" cy="83" r="12" fill="#EAF3DE" stroke="#1D9E75" stroke-width="1.5"/>
+      <text x="350" y="88" text-anchor="middle" font-family="Georgia,serif" font-size="14" fill="#085041">×</text>
+      <line x1="390" y1="83" x2="404" y2="70" stroke="#1D9E75" stroke-width="1.5" marker-end="url(#arr7)"/>
+
+      <!-- Dimmed forget gate σ -->
+      <rect x="185" y="118" width="70" height="38" rx="8" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="220" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#D3D1C7">σ</text>
+
+      <!-- HIGHLIGHTED: Input gate σ + candidate tanh -->
+      <line x1="310" y1="83" x2="310" y2="118" stroke="#1D9E75" stroke-width="1.5" marker-end="url(#arr7)"/>
+      <rect x="275" y="118" width="70" height="38" rx="8" fill="#EAF3DE" stroke="#1D9E75" stroke-width="2"/>
+      <text x="310" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="15" font-weight="700" fill="#085041">σ</text>
+
+      <line x1="390" y1="83" x2="390" y2="118" stroke="#1D9E75" stroke-width="1.5" marker-end="url(#arr7)"/>
+      <rect x="354" y="118" width="72" height="38" rx="8" fill="#C0DD97" stroke="#3B6D11" stroke-width="2"/>
+      <text x="390" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="14" font-weight="700" fill="#27500A">tanh</text>
+
+      <!-- Arrows from σ and tanh to × -->
+      <line x1="310" y1="118" x2="330" y2="95" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr7)"/>
+      <line x1="390" y1="118" x2="368" y2="95" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr7)"/>
+
+      <!-- iₜ and C̃ₜ labels -->
+      <text x="295" y="113" font-family="Courier New,monospace" font-size="12" fill="#085041">iₜ</text>
+      <text x="398" y="113" font-family="Courier New,monospace" font-size="12" fill="#27500A">C̃ₜ</text>
+
+      <!-- Dimmed output gate -->
+      <rect x="500" y="118" width="80" height="38" rx="8" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="540" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#D3D1C7">σ</text>
+
+      <!-- [ht-1, xt] input -->
+      <rect x="250" y="172" width="180" height="36" rx="8" fill="#EAF3DE" stroke="#1D9E75" stroke-width="1"/>
+      <text x="340" y="195" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#085041">[hₜ₋₁, xₜ]</text>
+      <line x1="310" y1="172" x2="310" y2="156" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr7)"/>
+      <line x1="390" y1="172" x2="390" y2="156" stroke="#1D9E75" stroke-width="1.3" marker-end="url(#arr7)"/>
+
+      <!-- Annotation -->
+      <text x="560" y="178" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#085041" font-style="italic">e.g. add new subject</text>
+      <text x="560" y="196" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#085041" font-style="italic">gender to cell state</text>
+    </svg>
+    <div class="diagram-caption">Step 2 — Input gate (σ) + Candidate values (tanh): highlighted in green. Their product is added to the cell state.</div>
+  </div>
+
+  <div class="formula">
+    <span class="eq">iₜ = σ(Wᵢ · [hₜ₋₁, xₜ] + bᵢ)  <span class="comment">// input gate: which values to update</span></span>
+    <span class="eq">C̃ₜ = tanh(W_C · [hₜ₋₁, xₜ] + b_C)  <span class="comment">// candidate values (range: -1 to 1)</span></span>
+  </div>
+
+  <!-- STEP 3: CELL STATE UPDATE -->
+  <div class="step-card step3">
+    <span class="step-num">3</span><h4>Cell State Update — Combining forget and input</h4>
+    <p>Now we perform the actual cell state update. We multiply the old cell state by fₜ (forgetting what we decided to forget), then add iₜ × C̃ₜ (scaling the new candidates by how much we decided to update each position).</p>
+  </div>
+
+  <div class="diagram">
+    <svg width="100%" viewBox="0 0 680 160">
+      <defs>
+        <marker id="arr8" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- Full cell state update highlighted -->
+      <line x1="50" y1="72" x2="630" y2="72" stroke="#BA7517" stroke-width="2.5"/>
+      <text x="36" y="76" text-anchor="end" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#633806">Cₜ₋₁</text>
+      <text x="638" y="76" text-anchor="start" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#633806">Cₜ</text>
+
+      <!-- × gate (forget) -->
+      <circle cx="220" cy="72" r="20" fill="#FAEEDA" stroke="#BA7517" stroke-width="2"/>
+      <text x="220" y="77" text-anchor="middle" font-family="Georgia,serif" font-size="20" fill="#633806">×</text>
+      <text x="220" y="110" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#633806">×fₜ</text>
+      <text x="220" y="128" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#888780">(forget old)</text>
+      <line x1="220" y1="92" x2="220" y2="100" stroke="#BA7517" stroke-width="1.2" stroke-dasharray="3,2"/>
+
+      <!-- + gate (input) -->
+      <circle cx="420" cy="72" r="20" fill="#FAEEDA" stroke="#BA7517" stroke-width="2"/>
+      <text x="420" y="77" text-anchor="middle" font-family="Georgia,serif" font-size="20" fill="#633806">+</text>
+      <text x="420" y="110" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#633806">+iₜ×C̃ₜ</text>
+      <text x="420" y="128" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#888780">(add new)</text>
+      <line x1="420" y1="92" x2="420" y2="100" stroke="#BA7517" stroke-width="1.2" stroke-dasharray="3,2"/>
+
+      <!-- Big formula box -->
+      <rect x="160" y="135" width="360" height="20" rx="0" fill="none"/>
+      <text x="340" y="150" text-anchor="middle" font-family="Courier New,monospace" font-size="14" font-weight="700" fill="#412402">Cₜ = fₜ * Cₜ₋₁  +  iₜ * C̃ₜ</text>
+    </svg>
+    <div class="diagram-caption">Step 3 — Cell state update: old state scaled by forget gate, then new candidates scaled by input gate are added</div>
+  </div>
+
+  <div class="formula">
+    <span class="eq">Cₜ = fₜ * Cₜ₋₁  +  iₜ * C̃ₜ</span>
+    <span class="comment">// fₜ*Cₜ₋₁ = selectively forget; iₜ*C̃ₜ = selectively write new info</span>
+  </div>
+
+  <!-- STEP 4: OUTPUT GATE -->
+  <div class="step-card step4">
+    <span class="step-num">4</span><h4>Output Gate — What to read out as hidden state</h4>
+    <p>The final step decides what to output. A sigmoid layer (output gate) decides which parts of the cell state to expose. The cell state is then pushed through tanh (to squash values to [-1,1]) and multiplied by the output gate — giving us the new hidden state hₜ.</p>
+  </div>
+
+  <div class="diagram">
+    <svg width="100%" viewBox="0 0 680 220">
+      <defs>
+        <marker id="arr9" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <!-- Cell state line (now complete) -->
+      <line x1="50" y1="65" x2="630" y2="65" stroke="#D3D1C7" stroke-width="2"/>
+      <text x="36" y="69" text-anchor="end" font-family="Courier New,monospace" font-size="12" fill="#888780">Cₜ₋₁</text>
+      <text x="638" y="69" text-anchor="start" font-family="Courier New,monospace" font-size="12" fill="#888780">Cₜ</text>
+
+      <!-- Dimmed × and + -->
+      <circle cx="220" cy="65" r="16" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="220" y="70" text-anchor="middle" font-family="Georgia,serif" font-size="16" fill="#D3D1C7">×</text>
+      <circle cx="420" cy="65" r="16" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="420" y="70" text-anchor="middle" font-family="Georgia,serif" font-size="16" fill="#D3D1C7">+</text>
+
+      <!-- HIGHLIGHTED output path: Ct → tanh → × → ht -->
+      <line x1="540" y1="65" x2="540" y2="95" stroke="#534AB7" stroke-width="1.5"/>
+      <rect x="510" y="95" width="60" height="32" rx="8" fill="#C0DD97" stroke="#3B6D11" stroke-width="1.5"/>
+      <text x="540" y="116" text-anchor="middle" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#27500A">tanh</text>
+
+      <line x1="540" y1="127" x2="540" y2="148" stroke="#534AB7" stroke-width="1.5" marker-end="url(#arr9)"/>
+      <circle cx="566" cy="155" r="18" fill="#EEEDFE" stroke="#534AB7" stroke-width="2"/>
+      <text x="566" y="160" text-anchor="middle" font-family="Georgia,serif" font-size="18" fill="#3C3489">×</text>
+
+      <line x1="584" y1="155" x2="630" y2="155" stroke="#534AB7" stroke-width="1.5" marker-end="url(#arr9)"/>
+      <text x="635" y="159" text-anchor="start" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#3C3489">hₜ</text>
+
+      <!-- Dimmed gate boxes -->
+      <rect x="185" y="118" width="70" height="38" rx="8" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="220" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#D3D1C7">σ</text>
+      <rect x="275" y="118" width="70" height="38" rx="8" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="310" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#D3D1C7">σ</text>
+      <rect x="355" y="118" width="80" height="38" rx="8" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="395" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#D3D1C7">tanh</text>
+
+      <!-- HIGHLIGHTED: Output gate σ -->
+      <line x1="566" y1="137" x2="566" y2="118" stroke="#534AB7" stroke-width="1.5" marker-end="url(#arr9)"/>
+      <rect x="530" y="118" width="72" height="38" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="2"/>
+      <text x="566" y="142" text-anchor="middle" font-family="Courier New,monospace" font-size="15" font-weight="700" fill="#3C3489">σ</text>
+
+      <!-- [ht-1, xt] input -->
+      <rect x="250" y="172" width="180" height="36" rx="8" fill="#F4F3EE" stroke="#D3D1C7" stroke-width="1"/>
+      <text x="340" y="195" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#888780">[hₜ₋₁, xₜ]</text>
+      <line x1="420" y1="172" x2="556" y2="156" stroke="#534AB7" stroke-width="1.3" marker-end="url(#arr9)"/>
+
+      <!-- oₜ label -->
+      <text x="582" y="113" font-family="Courier New,monospace" font-size="12" fill="#3C3489">oₜ</text>
+
+      <!-- Annotation -->
+      <text x="330" y="183" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#3C3489" font-style="italic">e.g. output whether subject</text>
+      <text x="330" y="199" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#3C3489" font-style="italic">is singular/plural for verb conjugation</text>
+    </svg>
+    <div class="diagram-caption">Step 4 — Output gate: highlighted in purple. The cell state passes through tanh and is filtered by the output gate σ to produce hₜ</div>
+  </div>
+
+  <div class="formula">
+    <span class="eq">oₜ = σ(W_o · [hₜ₋₁, xₜ] + b_o)  <span class="comment">// output gate</span></span>
+    <span class="eq">hₜ = oₜ * tanh(Cₜ)  <span class="comment">// new hidden state (what we expose)</span></span>
+  </div>
+
+  <div class="success"><strong>Why this works:</strong> The cell state Cₜ can carry relevant information over many steps with minimal modification (only the small × and + operations on it). Gradients flow cleanly backward through the + operation — there's always a direct gradient path, no repeated matrix multiplication shrinking it to zero.</div>
+</div>
+
+<!-- ═══════════════════════════════════════ SECTION 6 ═══ -->
+<div class="section s6">
+  <div class="section-title">§6 — Variants on LSTM</div>
+
+  <p>In practice, almost every paper that uses LSTMs uses a slightly modified version. The differences are often minor, but three variants are worth knowing.</p>
+
+  <table class="cmp">
+    <thead>
+      <tr><th>Variant</th><th>What changes</th><th>Why it matters</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge b-blue">Peephole Connections</span><br><small>Gers &amp; Schmidhuber, 2000</small></td>
+        <td>Gate layers can "peek" at the cell state Cₜ₋₁ directly (in addition to hₜ₋₁ and xₜ)</td>
+        <td>Useful when precise timing matters (e.g. identifying exact intervals in a sequence)</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-amber">Coupled Forget/Input</span></td>
+        <td>Instead of separate forget and input decisions, they are tied: we only input when we forget, and vice versa</td>
+        <td>Simpler model; prevents wasting capacity storing redundant info</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-coral">GRU</span><br><small>Cho et al., 2014</small></td>
+        <td>Merges forget+input into one "update gate"; merges cell state and hidden state; removes separate output gate</td>
+        <td class="hi">Simpler (fewer parameters), often same performance as LSTM, faster to train. Increasingly popular.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>Greff et al. (2015) compared eight major LSTM variants systematically and found they all perform approximately the same on most tasks. The vanilla LSTM remains an excellent default choice.</p>
+
+  <div class="diagram">
+    <svg width="100%" viewBox="0 0 680 200">
+      <defs>
+        <marker id="arr10" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+
+      <text x="340" y="20" text-anchor="middle" font-family="Georgia,serif" font-size="13" font-weight="700" fill="#26215C">GRU (Gated Recurrent Unit) — simplified LSTM</text>
+
+      <!-- GRU cell box -->
+      <rect x="120" y="34" width="440" height="130" rx="14" fill="#EEEDFE" stroke="#534AB7" stroke-width="1"/>
+
+      <!-- hₜ₋₁ input -->
+      <line x1="60" y1="99" x2="120" y2="99" stroke="#534AB7" stroke-width="1.5" marker-end="url(#arr10)"/>
+      <text x="46" y="103" text-anchor="end" font-family="Courier New,monospace" font-size="13" fill="#3C3489">hₜ₋₁</text>
+
+      <!-- hₜ output -->
+      <line x1="560" y1="99" x2="620" y2="99" stroke="#534AB7" stroke-width="1.5" marker-end="url(#arr10)"/>
+      <text x="626" y="103" text-anchor="start" font-family="Courier New,monospace" font-size="13" fill="#3C3489">hₜ</text>
+
+      <!-- xₜ input -->
+      <line x1="340" y1="178" x2="340" y2="164" stroke="#534AB7" stroke-width="1.3" marker-end="url(#arr10)"/>
+      <text x="340" y="192" text-anchor="middle" font-family="Courier New,monospace" font-size="13" fill="#3C3489">xₜ</text>
+
+      <!-- Two gates: update (z) and reset (r) -->
+      <rect x="148" y="86" width="88" height="38" rx="8" fill="#AFA9EC" stroke="#534AB7" stroke-width="1.5"/>
+      <text x="192" y="110" text-anchor="middle" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#26215C">σ (zₜ)</text>
+
+      <rect x="260" y="86" width="88" height="38" rx="8" fill="#AFA9EC" stroke="#534AB7" stroke-width="1.5"/>
+      <text x="304" y="110" text-anchor="middle" font-family="Courier New,monospace" font-size="13" font-weight="700" fill="#26215C">σ (rₜ)</text>
+
+      <rect x="372" y="86" width="100" height="38" rx="8" fill="#C0DD97" stroke="#3B6D11" stroke-width="1.5"/>
+      <text x="422" y="110" text-anchor="middle" font-family="Courier New,monospace" font-size="14" font-weight="700" fill="#27500A">tanh (h̃ₜ)</text>
+
+      <!-- Labels below -->
+      <text x="192" y="148" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#3C3489">update gate</text>
+      <text x="304" y="148" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#3C3489">reset gate</text>
+      <text x="422" y="148" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#27500A">candidate h</text>
+
+      <!-- Annotations -->
+      <text x="192" y="60" text-anchor="middle" font-family="Georgia,serif" font-size="11" fill="#534AB7" font-style="italic">forget+input combined</text>
+      <text x="490" y="60" text-anchor="middle" font-family="Georgia,serif" font-size="11" fill="#888780" font-style="italic">no separate cell state Cₜ</text>
+    </svg>
+    <div class="diagram-caption">GRU collapses the LSTM's 3 gates into 2 (update + reset) and removes the separate cell state. Simpler but often equally powerful.</div>
+  </div>
+
+  <div class="formula">
+    <span class="eq">zₜ = σ(W_z · [hₜ₋₁, xₜ])  <span class="comment">// update gate (combined forget+input)</span></span>
+    <span class="eq">rₜ = σ(W_r · [hₜ₋₁, xₜ])  <span class="comment">// reset gate</span></span>
+    <span class="eq">h̃ₜ = tanh(W · [rₜ * hₜ₋₁, xₜ])  <span class="comment">// candidate hidden state</span></span>
+    <span class="eq">hₜ = (1 − zₜ) * hₜ₋₁ + zₜ * h̃ₜ  <span class="comment">// interpolate old + new</span></span>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- SUMMARY TABLE -->
+<div class="section">
+  <div class="section-title" style="border-left:4px solid #888780;color:#2C2C2A">Quick Reference — LSTM Equations</div>
+
+  <table class="cmp">
+    <thead>
+      <tr><th>Gate / Step</th><th>Equation</th><th>Role</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge b-coral">Forget fₜ</span></td>
+        <td><code>σ(Wf·[hₜ₋₁, xₜ] + bf)</code></td>
+        <td>What % of old cell state to keep</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-green">Input iₜ</span></td>
+        <td><code>σ(Wᵢ·[hₜ₋₁, xₜ] + bᵢ)</code></td>
+        <td>Which positions to update</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-green">Candidate C̃ₜ</span></td>
+        <td><code>tanh(W_C·[hₜ₋₁, xₜ] + b_C)</code></td>
+        <td>New values to potentially add</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-amber">Cell Cₜ</span></td>
+        <td><code>fₜ * Cₜ₋₁ + iₜ * C̃ₜ</code></td>
+        <td>Updated long-term memory</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-purple">Output oₜ</span></td>
+        <td><code>σ(W_o·[hₜ₋₁, xₜ] + b_o)</code></td>
+        <td>Which parts of Cₜ to expose</td>
+      </tr>
+      <tr>
+        <td><span class="badge b-purple">Hidden hₜ</span></td>
+        <td><code>oₜ * tanh(Cₜ)</code></td>
+        <td>Short-term output / next input</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="insight">
+    <strong>The big picture in one sentence:</strong> An LSTM cell maintains two memory streams — a <em>cell state</em> Cₜ (long-term, lightly modified each step) and a <em>hidden state</em> hₜ (short-term, fully recomputed each step) — connected by three learned gates that decide what to remember, update, and output at each timestep.
+  </div>
+
+  <p style="color:#888780;font-size:13px;margin-top:24px;text-align:center">Notes based on: Olah, C. (August 2015). "Understanding LSTM Networks." colah.github.io · Original paper: Hochreiter &amp; Schmidhuber (1997)</p>
+</div>
+
+</div>
+</body>
+</html>
